@@ -41,7 +41,7 @@ import org.springframework.statemachine.persist.RepositoryStateMachinePersist;
 import org.springframework.statemachine.redis.RedisStateMachineContextRepository;
 import org.springframework.statemachine.redis.RedisStateMachinePersister;
 
-@Configuration
+//@Configuration
 public class StateMachineConfig implements ApplicationContextAware{
 
 	private ApplicationContext applicationContext;

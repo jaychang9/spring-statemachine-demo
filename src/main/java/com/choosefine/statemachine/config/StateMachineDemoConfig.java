@@ -1,25 +1,11 @@
-/*
- * Copyright 2016 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package com.choosefine.statemachine.config;
 
+import com.choosefine.statemachine.bean.MyRedisStateMachineContextRepository;
 import java.util.EnumSet;
 import org.springframework.aop.framework.ProxyFactoryBean;
 import org.springframework.aop.target.CommonsPool2TargetSource;
 import org.springframework.beans.BeansException;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
@@ -27,28 +13,30 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.statemachine.StateContext;
 import org.springframework.statemachine.StateMachine;
 import org.springframework.statemachine.StateMachinePersist;
+import org.springframework.statemachine.action.Action;
 import org.springframework.statemachine.config.StateMachineBuilder;
 import org.springframework.statemachine.config.StateMachineBuilder.Builder;
 import org.springframework.statemachine.persist.RepositoryStateMachinePersist;
 import org.springframework.statemachine.redis.RedisStateMachineContextRepository;
 import org.springframework.statemachine.redis.RedisStateMachinePersister;
 
-//@Configuration
-public class MyStateMachineConfig implements ApplicationContextAware{
+/**
+ * 任务状态机配置
+ *
+ * @author 张洁
+ * @date 2017/11/14
+ */
+@SuppressWarnings("SpringJavaAutowiringInspection")
+@Configuration
+public class StateMachineDemoConfig implements ApplicationContextAware{
 
 	private ApplicationContext applicationContext;
 
-	@Autowired
-	private E1Action e1Action;
-
-	@Autowired
-	private E2Action e2Action;
-
-	@SuppressWarnings("SpringJavaAutowiringInspection")
-	@Autowired
-	private AddAction addAction;
+	@Value("${taskStateMachine.maxSize:2}")
+	private int taskStateMachineMaxSize;
 
 	@Bean
 	@Scope(value = "request", proxyMode = ScopedProxyMode.TARGET_CLASS)
@@ -61,49 +49,63 @@ public class MyStateMachineConfig implements ApplicationContextAware{
 	@Bean
 	public CommonsPool2TargetSource poolTargetSource() {
 		CommonsPool2TargetSource pool = new CommonsPool2TargetSource();
-		pool.setMaxSize(3);
+		pool.setMaxSize(taskStateMachineMaxSize);
 		pool.setTargetBeanName("stateMachineTarget");
 		return pool;
 	}
-//end::snippetB[]
 
-//tag::snippetC[]
 	@Bean(name = "stateMachineTarget")
 	@Scope(scopeName="prototype")
 	public StateMachine<States, Events> stateMachineTarget() throws Exception {
 		Builder<States, Events> builder = StateMachineBuilder.<States, Events>builder();
 
 		builder.configureConfiguration()
-			.withConfiguration().beanFactory(applicationContext.getAutowireCapableBeanFactory()).autoStartup(true);
+			.withConfiguration().beanFactory(applicationContext.getAutowireCapableBeanFactory())
+				.autoStartup(true);
 
 		builder.configureStates()
 			.withStates()
 				.initial(States.S1)
+				.end(States.S3)
 				.states(EnumSet.allOf(States.class));
 
 		builder.configureTransitions()
-			.withInternal()
-				.source(States.S1).event(Events.ADD)
-				.action(addAction)
-				.and()
-			.withExternal()
+			.withExternal()// 审核未通过 -关闭任务-》 任务已关闭
 				.source(States.S1).target(States.S2)
-				.action(e1Action)
+				.action(e1Action())
 				.event(Events.E1)
 				.and()
 			.withExternal()
 				.source(States.S2).target(States.S3)
-				.action(e2Action)
+				.action(e2Action())
 				.event(Events.E2);
 
 		return builder.build();
 	}
 
-// 	@Bean
-// 	public RedisConnectionFactory redisConnectionFactory() {
-// 		return new JedisConnectionFactory();
-// 	}
+	@Bean
+	public Action<States,Events> e1Action(){
+		return new Action(){
 
+			@Override
+			public void execute(StateContext context) {
+				System.out.println("e1Action");
+			}
+		};
+	}
+
+	@Bean
+	public Action<States,Events> e2Action(){
+		return new Action(){
+
+			@Override
+			public void execute(StateContext context) {
+				System.out.println("e2Action");
+			}
+		};
+	}
+
+	@SuppressWarnings("SpringJavaAutowiringInspection")
 	@Bean
 	public StateMachinePersist<States, Events, String> stateMachinePersist(RedisConnectionFactory connectionFactory) {
 		RedisStateMachineContextRepository<States, Events> repository =
@@ -122,11 +124,11 @@ public class MyStateMachineConfig implements ApplicationContextAware{
 		this.applicationContext = applicationContext;
 	}
 
-	public enum States {
+	public static enum States{
 		S1,S2,S3
 	}
 
-	public enum Events {
-		E1,E2,ADD,DEL
+	public static enum Events{
+		E1,E2
 	}
 }
